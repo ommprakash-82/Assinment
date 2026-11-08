@@ -30,7 +30,16 @@
  
   /* LAYOUT */
   .app{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 53px);}
-  @media(max-width:768px){.app{grid-template-columns:1fr}.sidebar{position:static!important;height:auto;border-right:none;border-bottom:1px solid var(--border);}}
+  @media(max-width:768px){
+    .app{grid-template-columns:1fr}
+    .sidebar{position:static!important;height:auto;border-right:none;border-bottom:1px solid var(--border);max-height:220px;overflow-y:auto;}
+    .main{padding:14px;}
+    .assign-item{padding:13px 10px;min-height:48px;}
+    .assign-name{font-size:0.95rem;}
+    .form-row{grid-template-columns:1fr!important;}
+    header{padding:12px 14px;}
+    header h1{font-size:1rem;}
+  }
  
   /* SIDEBAR */
   .sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;position:sticky;top:53px;height:calc(100vh - 53px);overflow-y:auto;}
@@ -346,14 +355,26 @@ function renderAssignments(list) {
   const items = el.querySelectorAll('.assign-item');
   items.forEach((item, i) => {
     const a = list[i];
-    item.querySelector('.assign-name').addEventListener('click', () => selectAssign(a.id, a.name));
-    item.addEventListener('click', (e) => {
-      if (!e.target.classList.contains('assign-del')) selectAssign(a.id, a.name);
-    });
-    item.querySelector('.assign-del').addEventListener('click', e => {
+ 
+    function handleSelect(e) {
+      if (e.target.classList.contains('assign-del')) return;
+      e.preventDefault();
+      selectAssign(a.id, a.name);
+    }
+ 
+    item.addEventListener('click',      handleSelect);
+    item.addEventListener('touchend',   handleSelect, { passive: false });
+ 
+    const delBtn = item.querySelector('.assign-del');
+    delBtn.addEventListener('click', e => {
       e.stopPropagation();
       deleteAssign(a.id, a.name);
     });
+    delBtn.addEventListener('touchend', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      deleteAssign(a.id, a.name);
+    }, { passive: false });
  
     // Count badge
     if (dbReady) {
