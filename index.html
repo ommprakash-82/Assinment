@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coding Q&A Board</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  :root {
+    --bg:#0d1117; --surface:#161b22; --surface2:#21262d; --border:#30363d;
+    --primary:#58a6ff; --primary-hover:#79b8ff; --accent:#3fb950;
+    --text:#e6edf3; --muted:#8b949e; --danger:#f85149; --radius:12px;
+    --shadow:0 4px 20px rgba(0,0,0,0.5);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  /* HEADER */
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;}
+  header h1{font-size:1.15rem;font-weight:700;display:flex;align-items:center;gap:10px;}
+  .live-badge{display:flex;align-items:center;gap:6px;background:#3fb95022;border:1px solid #3fb95055;color:var(--accent);padding:4px 12px;border-radius:20px;font-size:0.75rem;font-weight:600;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.5s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.8)}}
+  .fb-status{font-size:0.72rem;padding:3px 10px;border-radius:20px;font-weight:600;}
+  .fb-ok{background:#3fb95022;border:1px solid #3fb95055;color:var(--accent);}
+  .fb-err{background:#f8514922;border:1px solid #f8514955;color:var(--danger);}
+
+  /* LAYOUT */
+  .app{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 53px);}
+  @media(max-width:768px){.app{grid-template-columns:1fr}.sidebar{position:static!important;height:auto;border-right:none;border-bottom:1px solid var(--border);}}
+
+  /* SIDEBAR */
+  .sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;position:sticky;top:53px;height:calc(100vh - 53px);overflow-y:auto;}
+  .sidebar-title{font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+  .add-assign-btn{background:var(--primary);color:#0d1117;border:none;border-radius:6px;padding:4px 11px;font-size:0.75rem;font-weight:700;cursor:pointer;transition:background 0.2s;}
+  .add-assign-btn:hover{background:var(--primary-hover);}
+  .assign-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px;transition:all 0.15s;gap:6px;border:1px solid transparent;}
+  .assign-item:hover{background:var(--surface2);}
+  .assign-item.active{background:#1f6feb22;border-color:#1f6feb55;}
+  .assign-name{font-size:0.88rem;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .assign-item.active .assign-name{color:var(--primary);font-weight:600;}
+  .assign-count{background:var(--surface2);color:var(--muted);border-radius:20px;padding:1px 7px;font-size:0.7rem;flex-shrink:0;}
+  .assign-item.active .assign-count{background:var(--primary);color:#0d1117;}
+  .assign-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem;padding:2px 5px;border-radius:4px;opacity:0;transition:opacity 0.15s;flex-shrink:0;}
+  .assign-item:hover .assign-del{opacity:1;}
+  .assign-del:hover{color:var(--danger);}
+  .no-assigns{text-align:center;padding:30px 10px;color:var(--muted);font-size:0.82rem;line-height:1.6;}
+  .no-assigns .ico{font-size:2rem;margin-bottom:8px;}
+
+  /* MAIN */
+  .main{padding:24px;overflow-y:auto;}
+  .pick-state{text-align:center;padding:80px 20px;color:var(--muted);}
+  .pick-state .ico{font-size:3.5rem;margin-bottom:16px;}
+  .pick-state h2{font-size:1.1rem;margin-bottom:8px;color:var(--text);}
+  .assign-header{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+  .assign-header h2{font-size:1.1rem;font-weight:700;}
+  .assign-header-badge{background:#1f6feb22;border:1px solid #1f6feb55;color:var(--primary);padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;}
+
+  /* SEARCH */
+  .search-wrap{position:relative;margin-bottom:20px;}
+  .search-wrap input{width:100%;padding:10px 14px 10px 38px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.9rem;font-family:inherit;transition:border-color 0.2s;}
+  .search-wrap input:focus{outline:none;border-color:var(--primary);}
+  .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:0.95rem;pointer-events:none;}
+
+  /* ADD FORM */
+  .add-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px;}
+  .add-form h3{font-size:0.88rem;font-weight:600;color:var(--primary);margin-bottom:16px;}
+  .form-row{display:grid;grid-template-columns:1fr 160px;gap:12px;margin-bottom:12px;}
+  @media(max-width:600px){.form-row{grid-template-columns:1fr}}
+  .field label{display:block;font-size:0.72rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
+  .field input,.field select,.field textarea{width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.88rem;font-family:inherit;transition:border-color 0.2s;}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--primary);}
+  .field textarea{min-height:160px;resize:vertical;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:0.83rem;line-height:1.6;}
+  select option{background:var(--surface2);}
+  .btn-add{padding:10px 22px;background:var(--primary);color:#0d1117;border:none;border-radius:8px;font-size:0.88rem;font-weight:700;cursor:pointer;transition:all 0.2s;}
+  .btn-add:hover{background:var(--primary-hover);transform:translateY(-1px);}
+  .btn-add:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+
+  /* QA CARDS */
+  .qa-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;overflow:hidden;transition:border-color 0.2s;animation:slideIn 0.25s ease;}
+  @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .qa-card:hover{border-color:#58a6ff44;}
+  .card-header{padding:13px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:pointer;user-select:none;}
+  .card-header:hover{background:var(--surface2);}
+  .q-wrap{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;}
+  .q-label{background:var(--primary);color:#0d1117;border-radius:6px;padding:2px 7px;font-size:0.7rem;font-weight:800;flex-shrink:0;margin-top:2px;}
+  .q-text{font-size:0.93rem;font-weight:600;line-height:1.5;}
+  .card-actions{display:flex;align-items:center;gap:7px;flex-shrink:0;}
+  .lang-tag{background:#1f6feb22;color:var(--primary);border:1px solid #1f6feb44;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:600;}
+  .toggle-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.8rem;padding:2px 5px;border-radius:4px;}
+  .toggle-btn:hover{color:var(--text);}
+  .del-btn{background:none;border:1px solid var(--danger);color:var(--danger);cursor:pointer;border-radius:6px;padding:3px 8px;font-size:0.7rem;font-weight:600;transition:all 0.2s;}
+  .del-btn:hover{background:var(--danger);color:white;}
+  .answer-block{border-top:1px solid var(--border);}
+  .answer-block.hidden{display:none;}
+  .a-label-row{padding:10px 16px 0;display:flex;align-items:center;gap:8px;}
+  .a-label{background:var(--accent);color:#0d1117;border-radius:6px;padding:2px 7px;font-size:0.7rem;font-weight:800;}
+  .answer-block pre{margin:8px 0 0;border-radius:0 0 var(--radius) var(--radius);overflow-x:auto;}
+  .answer-block pre code{padding:16px 18px!important;display:block;font-family:'Cascadia Code','Fira Code','Consolas',monospace!important;font-size:0.83rem!important;line-height:1.65!important;background:#0a0d13!important;}
+  .copy-btn{margin-left:auto;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:0.7rem;cursor:pointer;transition:all 0.2s;}
+  .copy-btn:hover{border-color:var(--primary);color:var(--primary);}
+  .card-meta{padding:6px 16px 10px;font-size:0.7rem;color:var(--muted);}
+  .empty{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty .ico{font-size:2.5rem;margin-bottom:10px;}
+
+  /* MODAL */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity 0.2s;}
+  .modal-overlay.open{opacity:1;pointer-events:all;}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:420px;transform:translateY(16px);transition:transform 0.2s;box-shadow:var(--shadow);}
+  .modal-overlay.open .modal{transform:translateY(0);}
+  .modal h3{font-size:1rem;font-weight:700;margin-bottom:18px;}
+  .modal .field{margin-bottom:16px;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px;}
+  .btn-cancel{padding:9px 18px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:8px;font-size:0.88rem;cursor:pointer;}
+  .btn-cancel:hover{color:var(--text);}
+  .btn-confirm{padding:9px 18px;background:var(--primary);color:#0d1117;border:none;border-radius:8px;font-size:0.88rem;font-weight:700;cursor:pointer;}
+  .btn-confirm:hover{background:var(--primary-hover);}
+
+  /* TOAST */
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--accent);color:var(--text);padding:11px 18px;border-radius:10px;font-size:0.85rem;box-shadow:var(--shadow);transform:translateY(60px);opacity:0;transition:all 0.3s;z-index:999;}
+  .toast.show{transform:translateY(0);opacity:1;}
+  .toast.error{border-color:var(--danger);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💻 Coding Q&amp;A Board</h1>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span class="fb-status fb-err" id="fb-status">⚠ Firebase config daalo</span>
+    <div class="live-badge"><div class="live-dot"></div> Live Sync</div>
+  </div>
+</header>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-title">
+      📁 Assignments
+      <button class="add-assign-btn" id="open-modal-btn">+ New</button>
+    </div>
+    <div id="assign-list">
+      <div class="no-assigns"><div class="ico">📂</div>Koi assignment nahi.<br>New button dabao.</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="pick-state" id="pick-state">
+      <div class="ico">👈</div>
+      <h2>Pehle ek Assignment select karo</h2>
+      <p>Ya sidebar mein naya assignment banao.</p>
+    </div>
+    <div id="active-content" style="display:none;">
+      <div class="assign-header">
+        <h2 id="active-title">—</h2>
+        <span class="assign-header-badge" id="active-badge">0 Q&amp;As</span>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search" placeholder="Questions search karo..." />
+      </div>
+      <div class="add-form">
+        <h3>➕ Naya Q&amp;A Add Karo</h3>
+        <div class="form-row">
+          <div class="field">
+            <label>Question</label>
+            <input type="text" id="inp-q" placeholder="e.g. Reverse a string in Python?" />
+          </div>
+          <div class="field">
+            <label>Language</label>
+            <select id="inp-lang">
+              <option value="python">Python</option>
+              <option value="javascript">JavaScript</option>
+              <option value="java">Java</option>
+              <option value="cpp">C++</option>
+              <option value="c">C</option>
+              <option value="typescript">TypeScript</option>
+              <option value="html">HTML</option>
+              <option value="css">CSS</option>
+              <option value="sql">SQL</option>
+              <option value="bash">Bash</option>
+              <option value="go">Go</option>
+              <option value="rust">Rust</option>
+              <option value="php">PHP</option>
+              <option value="plaintext">Plain Text</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Answer (Code)</label>
+          <textarea id="inp-a" placeholder="# Yahan code likhein..."></textarea>
+        </div>
+        <button class="btn-add" id="btn-add">➕ Add Q&amp;A</button>
+      </div>
+      <div id="qa-list"></div>
+    </div>
+  </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="assign-modal">
+  <div class="modal">
+    <h3>📁 Naya Assignment Banao</h3>
+    <div class="field">
+      <label>Assignment Name</label>
+      <input type="text" id="assign-name-inp" placeholder="e.g. Week 1 - Arrays, Python Basics..." />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="close-modal-btn">Cancel</button>
+      <button class="btn-confirm" id="create-assign-btn">✅ Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// UI STATE (Firebase ke bina bhi kaam karta hai)
+// ─────────────────────────────────────────────
+let activeAssignId  = null;
+let allQAs          = [];
+let qaListener      = null;
+let _assignments    = [];
+let dbReady         = false;
+let dbRef           = null;   // Firebase db, null jab tak init nahi hota
+
+// ── MODAL ──────────────────────────────────
+const modal         = document.getElementById('assign-modal');
+const assignNameInp = document.getElementById('assign-name-inp');
+
+document.getElementById('open-modal-btn').addEventListener('click', openModal);
+document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+document.getElementById('create-assign-btn').addEventListener('click', createAssignment);
+document.getElementById('btn-add').addEventListener('click', addQA);
+document.getElementById('search').addEventListener('input', filterList);
+
+modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+assignNameInp.addEventListener('keydown', e => { if (e.key === 'Enter') createAssignment(); });
+
+function openModal()  { modal.classList.add('open'); setTimeout(() => assignNameInp.focus(), 80); }
+function closeModal() { modal.classList.remove('open'); assignNameInp.value = ''; }
+
+// ── FIREBASE INIT ──────────────────────────
+// =============================================
+// 🔥 APNA FIREBASE CONFIG YAHAN DAALO
+// =============================================
+const firebaseConfig = {
+  apiKey:            "AIzaSyBFcbJle4JiLyBjbOEx4xTYY92KmyX6h00",
+  authDomain:        "assignment-ac495.firebaseapp.com",
+  databaseURL:       "https://assignment-ac495-default-rtdb.firebaseio.com",
+  projectId:         "assignment-ac495",
+  storageBucket:     "assignment-ac495.firebasestorage.app",
+  messagingSenderId: "833161836377",
+  appId:             "1:833161836377:web:86824dd0aa83b46abdbe48"
+};
+// =============================================
+
+try {
+  if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+    firebase.initializeApp(firebaseConfig);
+    dbRef   = firebase.database();
+    dbReady = true;
+    document.getElementById('fb-status').textContent  = '🔥 Firebase Connected';
+    document.getElementById('fb-status').className    = 'fb-status fb-ok';
+    startFirebaseListeners();
+  } else {
+    console.warn("Firebase config nahi daala. Sirf UI test mode.");
+  }
+} catch(e) {
+  console.error("Firebase init error:", e.message);
+  showToast("Firebase error: " + e.message, 'error');
+}
+
+function startFirebaseListeners() {
+  dbRef.ref("assignments").orderByChild("createdAt").on("value", snap => {
+    const data = snap.val() || {};
+    _assignments = Object.entries(data)
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => a.createdAt - b.createdAt);
+    renderAssignments(_assignments);
+  });
+}
+
+// ── CREATE ASSIGNMENT ──────────────────────
+function createAssignment() {
+  const name = assignNameInp.value.trim();
+  if (!name) { showToast('Assignment ka naam daalo!', 'error'); return; }
+
+  if (dbReady) {
+    dbRef.ref("assignments").push({ name, createdAt: Date.now() })
+      .then(() => { closeModal(); showToast('✅ Assignment ban gaya!'); })
+      .catch(e => showToast('Firebase Error: ' + e.message, 'error'));
+  } else {
+    // Offline fallback (without Firebase)
+    const id = 'local_' + Date.now();
+    _assignments.push({ id, name, createdAt: Date.now() });
+    renderAssignments(_assignments);
+    closeModal();
+    showToast('✅ Assignment ban gaya! (Local mode)');
+  }
+}
+
+// ── DELETE ASSIGNMENT ──────────────────────
+function deleteAssign(id, name) {
+  if (!confirm(`"${name}" aur uske saare Q&As delete karna chahte ho?`)) return;
+  if (dbReady) {
+    dbRef.ref(`assignments/${id}`).remove();
+    dbRef.ref(`qa_items/${id}`).remove();
+  } else {
+    _assignments = _assignments.filter(a => a.id !== id);
+    renderAssignments(_assignments);
+  }
+  if (activeAssignId === id) {
+    activeAssignId = null;
+    document.getElementById('pick-state').style.display    = 'block';
+    document.getElementById('active-content').style.display = 'none';
+  }
+  showToast('🗑️ Delete ho gaya!');
+}
+
+// ── RENDER ASSIGNMENTS ─────────────────────
+function renderAssignments(list) {
+  const el = document.getElementById('assign-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="no-assigns"><div class="ico">📂</div>Koi assignment nahi.<br>New button dabao.</div>';
+    return;
+  }
+  el.innerHTML = list.map(a => `
+    <div class="assign-item ${a.id === activeAssignId ? 'active' : ''}">
+      <span class="assign-name" title="${esc(a.name)}">${esc(a.name)}</span>
+      <span class="assign-count" id="ac-${a.id}">0</span>
+      <button class="assign-del" title="Delete">✕</button>
+    </div>
+  `).join('');
+
+  // Attach events
+  const items = el.querySelectorAll('.assign-item');
+  items.forEach((item, i) => {
+    const a = list[i];
+    item.querySelector('.assign-name').addEventListener('click', () => selectAssign(a.id, a.name));
+    item.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('assign-del')) selectAssign(a.id, a.name);
+    });
+    item.querySelector('.assign-del').addEventListener('click', e => {
+      e.stopPropagation();
+      deleteAssign(a.id, a.name);
+    });
+
+    // Count badge
+    if (dbReady) {
+      dbRef.ref(`qa_items/${a.id}`).on("value", s => {
+        const n = s.val() ? Object.keys(s.val()).length : 0;
+        const badge = document.getElementById('ac-' + a.id);
+        if (badge) badge.textContent = n;
+      });
+    }
+  });
+}
+
+// ── SELECT ASSIGNMENT ──────────────────────
+function selectAssign(id, name) {
+  activeAssignId = id;
+  document.getElementById('active-title').textContent       = name;
+  document.getElementById('pick-state').style.display       = 'none';
+  document.getElementById('active-content').style.display   = 'block';
+  document.getElementById('search').value                   = '';
+  renderAssignments(_assignments);
+
+  if (dbReady) {
+    if (qaListener) dbRef.ref(`qa_items/${qaListener}`).off();
+    qaListener = id;
+    dbRef.ref(`qa_items/${id}`).orderByChild("createdAt").on("value", snap => {
+      const data = snap.val() || {};
+      allQAs = Object.entries(data)
+        .map(([qid, v]) => ({ id: qid, ...v }))
+        .sort((a, b) => a.createdAt - b.createdAt);
+      document.getElementById('active-badge').textContent = allQAs.length + ' Q&As';
+      filterList();
+    });
+  } else {
+    allQAs = [];
+    filterList();
+  }
+}
+
+// ── ADD Q&A ───────────────────────────────
+function addQA() {
+  if (!activeAssignId) { showToast('Pehle assignment select karo!', 'error'); return; }
+  const q    = document.getElementById('inp-q').value.trim();
+  const a    = document.getElementById('inp-a').value.trim();
+  const lang = document.getElementById('inp-lang').value;
+  if (!q || !a) { showToast('Question aur Answer dono bharo!', 'error'); return; }
+
+  const btn = document.getElementById('btn-add');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  if (dbReady) {
+    dbRef.ref(`qa_items/${activeAssignId}`).push({ question:q, answer:a, language:lang, createdAt:Date.now() })
+      .then(() => {
+        document.getElementById('inp-q').value = '';
+        document.getElementById('inp-a').value = '';
+        showToast('✅ Q&A add ho gaya!');
+      })
+      .catch(e => showToast('Error: ' + e.message, 'error'))
+      .finally(() => { btn.disabled = false; btn.textContent = '➕ Add Q&A'; });
+  } else {
+    showToast('Firebase config daalo pehle!', 'error');
+    btn.disabled = false; btn.textContent = '➕ Add Q&A';
+  }
+}
+
+// ── DELETE Q&A ────────────────────────────
+function deleteQA(qid) {
+  if (!confirm('Is Q&A ko delete karna chahte ho?')) return;
+  if (dbReady) {
+    dbRef.ref(`qa_items/${activeAssignId}/${qid}`).remove()
+      .then(() => showToast('🗑️ Delete ho gaya!'))
+      .catch(e => showToast('Error: ' + e.message, 'error'));
+  }
+}
+
+// ── FILTER / RENDER QAs ───────────────────
+function filterList() {
+  const q = (document.getElementById('search')?.value || '').toLowerCase();
+  const filtered = allQAs.filter(i => i.question.toLowerCase().includes(q));
+  const list = document.getElementById('qa-list');
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty"><div class="ico">💬</div>${q ? 'Koi result nahi.' : 'Koi Q&A nahi. Upar se add karo!'}</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map((item, i) => `
+    <div class="qa-card">
+      <div class="card-header" data-id="${item.id}">
+        <div class="q-wrap">
+          <span class="q-label">Q</span>
+          <span class="q-text">${esc(item.question)}</span>
+        </div>
+        <div class="card-actions">
+          <span class="lang-tag">${esc(item.language||'code')}</span>
+          <button class="toggle-btn">▼</button>
+          <button class="del-btn" data-qid="${item.id}">🗑️</button>
+        </div>
+      </div>
+      <div class="answer-block hidden">
+        <div class="a-label-row">
+          <span class="a-label">A</span>
+          <button class="copy-btn">📋 Copy</button>
+        </div>
+        <pre><code class="language-${esc(item.language||'plaintext')}">${esc(item.answer)}</code></pre>
+      </div>
+      <div class="card-meta">#${i+1} · ${timeAgo(item.createdAt)}</div>
+    </div>
+  `).join('');
+
+  // Highlight syntax
+  list.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+
+  // Toggle answer
+  list.querySelectorAll('.card-header').forEach(header => {
+    header.addEventListener('click', function(e) {
+      if (e.target.classList.contains('del-btn')) return;
+      const card   = this.closest('.qa-card');
+      const ans    = card.querySelector('.answer-block');
+      const btn    = card.querySelector('.toggle-btn');
+      const hidden = ans.classList.toggle('hidden');
+      btn.textContent = hidden ? '▼' : '▲';
+    });
+  });
+
+  // Delete Q&A
+  list.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      deleteQA(btn.dataset.qid);
+    });
+  });
+
+  // Copy code
+  list.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const code = btn.closest('.answer-block').querySelector('code').innerText;
+      navigator.clipboard.writeText(code).then(() => showToast('📋 Code copy ho gaya!'));
+    });
+  });
+}
+
+// ── HELPERS ───────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = Date.now() - ts;
+  if (d < 60000)   return 'Abhi abhi';
+  if (d < 3600000) return Math.floor(d/60000) + ' min pehle';
+  if (d < 86400000)return Math.floor(d/3600000) + ' ghante pehle';
+  return Math.floor(d/86400000) + ' din pehle';
+}
+let _tt;
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(_tt);
+  _tt = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
